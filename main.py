@@ -4,12 +4,16 @@ from random import choice
 
 import pygame
 
+SCORES = open("data/scores.txt").read().split()
 pygame.init()
 size = WIDTH, HEIGHT = 700, 650
 SCREEN = pygame.display.set_mode(size)
 SCREEN.fill('black')
 FPS = 50
 clock = pygame.time.Clock()
+c1 = pygame.Color((0, 0, 0))  # у меня вообще дальтонизм не судите строга
+c2 = pygame.Color((255, 255, 255))
+c3 = pygame.Color((140, 255, 251))
 
 
 def load_image(name, colorkey=None):
@@ -29,7 +33,29 @@ def load_image(name, colorkey=None):
     return image
 
 
+def load_text(screen, text, text_coord, font, text_BACK_on_screen=True):
+    coords = []
+    for i in range(len(text)):
+        coords.append(text_coord)
+        string_rendered = font.render(text[i], True, c3, c1)
+        screen.blit(string_rendered, (10, text_coord))
+        if text_BACK_on_screen and i == len(text) - 2:
+            text_coord += 20
+        text_coord += 9
+        text_coord += string_rendered.get_rect().height
+    return coords
+
+
+def select_text(screen, font, text, selected, coords, m):
+    screen.blit(font.render(text[selected], True, c3, c1), (10, coords[selected]))
+    selected = (selected + m) % len(text)
+    screen.blit(font.render(text[selected], True, c2, c1), (10, coords[selected]))
+    return selected
+
+
 def terminate():
+    s = open('data/scores.txt', mode='w')
+    s.write(' '.join(SCORES))  # перед выходом из программы заносим изменения в файл с рекордами
     pygame.quit()
     sys.exit()
 
@@ -68,12 +94,16 @@ class Field:
         self.left = 10
         self.top = 10
         self.cell_size = 30
-        self.speed = 1.5
-        self.score = 1400
-        self.level = self.score // 1500 + 1
+        self.score = 0
+        self.difficulty = 1
+        self.upd_level()
         self.end = False
         self.coords_y = []
         self.coords_x = []
+
+    def upd_level(self):
+        self.level = self.score // 1500 + self.difficulty
+        self.speed = self.speed = 1.5 * 1.4 ** self.level
 
     def set_view(self, left, top, cell_size):
         self.left = left
@@ -185,9 +215,7 @@ class Field:
             self.score += 700
         elif x == 4:
             self.score += 1500
-        if self.level != self.score // 1500 + 1:
-            self.level = self.score // 1500 + 1
-            self.speed *= 1.4
+        self.upd_level()
         return True
 
 
@@ -196,23 +224,27 @@ FIELD_HEIGHT = 20
 pygame.display.set_caption("Tetris")
 
 
+def frame(screen, x, y, w, h):  # рамка для текста or smth
+    screen.fill('white', (x - 1, y - 1, w + 2, h + 2))
+    screen.fill(c1, (x, y, w, h))
+
+
+field = Field(FIELD_WIDTH, FIELD_HEIGHT)
+
+
 def main_screen():
     screen = pygame.Surface(size)
     screen.fill('black')
     fon = pygame.transform.scale(load_image('fon1.jpeg'), (WIDTH, HEIGHT))
     screen.blit(fon, (0, 0))
+    global field
     field = Field(FIELD_WIDTH, FIELD_HEIGHT)
     field.set_view(200, 25, 30)
     field.figure(choice(ALL_FIGURES))
     field.render(screen)
-
-    def frame(x, y, w, h):  # рамка для текста or smth
-        screen.fill('white', (x - 1, y - 1, w + 2, h + 2))
-        screen.fill('black', (x, y, w, h))
-
-    frame(510, field.top + 1, 180, 200)
-    frame(10, field.top + 60, 180, 70)
-    frame(10, field.top + 1, 180, 27)
+    frame(screen, 510, field.top + 1, 180, 200)
+    frame(screen, 10, field.top + 60, 180, 70)
+    frame(screen, 10, field.top + 1, 180, 27)
     next_figure = pygame.transform.scale(load_image(field.next_figure + '.png'), (180, 180))
     screen.blit(next_figure, (510, field.top + 20))
     font = pygame.font.Font(None, 35)
@@ -247,6 +279,8 @@ def main_screen():
                 elif key == pygame.K_ESCAPE:
                     if not pause():
                         return True
+                    screen.blit(font.render(str(field.level), True, pygame.Color('white'), pygame.Color('black')),
+                                (100, field.top + 3))
                 field.render(screen)
                 SCREEN.blit(screen, (0, 0))
                 pygame.display.flip()
@@ -258,7 +292,7 @@ def main_screen():
             field.update()
             next_figure = pygame.transform.scale(load_image(field.next_figure + '.png'), (180, 180))
             screen.blit(next_figure, (510, field.top + 20))
-            if field.check_rows():  # анимация удаления ряда и изменение очков
+            if field.check_rows():  #изменение очков
                 string = font.render(str(field.score), True, pygame.Color('white'), pygame.Color('black'))
                 screen.blit(string, rect.move(0, 35))
                 screen.blit(font.render(str(field.level), True, pygame.Color('white'), pygame.Color('black')),
@@ -266,26 +300,24 @@ def main_screen():
             field.render(screen)
         SCREEN.blit(screen, (0, 0))
         pygame.display.flip()
+    global SCORES
+    SCORES.append(str(field.score))
+    SCORES = sorted(SCORES, reverse=True, key=lambda x: int(x))[:5]
+    game_over(screen, 1000 // field.speed)
+    return True
 
 
 def pause():
-    c1 = pygame.Color((200, 150, 0))  # у меня вообще дальтонизм не судите строга
+    c1 = pygame.Color((0, 0, 0))  # у меня вообще дальтонизм не судите строга
     c2 = pygame.Color((255, 255, 255))
-    c3 = pygame.Color((0, 0, 0))
-    screen = pygame.Surface((210, 210))
-    text = ["Resume", "Restart", "Controls", "Change difficulty", "Exit"]
-    screen.fill(c1)
+    c3 = pygame.Color((140, 255, 251))
+    screen = pygame.Surface((210, 250))
+    text = ["Resume", "Restart", "Controls", "Change difficulty", "Main menu", "Exit"]
+    frame(screen, 1, 1, 208, 248)
     selected = 0
-    clock = pygame.time.Clock()
     font = pygame.font.Font(None, 30)
     text_coord = 30
-    coords = []
-    for line in text:
-        coords.append(text_coord)
-        string_rendered = font.render(line, True, c3)
-        screen.blit(string_rendered, (10, text_coord))
-        text_coord += 10
-        text_coord += string_rendered.get_rect().height
+    coords = load_text(screen, text, text_coord, font)
     screen.blit(font.render(text[selected], True, c2), (10, coords[selected]))
     screen.blit(pygame.transform.scale(load_image('pause.png'), (50, 50)), (150, 10))
     while True:
@@ -294,32 +326,168 @@ def pause():
                 terminate()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_DOWN:
-                    screen.blit(font.render(text[selected], True, c3), (10, coords[selected]))
-                    selected = (selected + 1) % 5
-                    screen.blit(font.render(text[selected], True, c2), (10, coords[selected]))
+                    selected = select_text(screen, font, text, selected, coords, 1)
                 elif event.key == pygame.K_UP:
-                    screen.blit(font.render(text[selected], True, c3), (10, coords[selected]))
-                    selected = (selected - 1) % 5
-                    screen.blit(font.render(text[selected], True, c2), (10, coords[selected]))
+                    selected = select_text(screen, font, text, selected, coords, -1)
                 elif event.key == pygame.K_ESCAPE:
                     return True
                 elif event.key == 13:  # у меня не работает K_ENTER, и K_enter, и ENTER тожe
-                    if selected == 4:
+                    if selected == 5:
                         terminate()
+                    elif selected == 4:
+                        main_menu()
+                        return False
                     elif selected == 3:
-                        pass
+                        global field
+                        field = change_difficulty(field)
                     elif selected == 2:
-                        pass
+                        controls()
                     elif selected == 1:
                         return False
-
-                    return True
-        SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 105))
+                    elif selected == 0:
+                        return True
+        SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(FPS)
+
+
+def game_over(screen, speed):
+    pic = pygame.transform.scale(load_image("game over.jpg"), (298, 148))
+    t = 0
+    for i in range(8):
+        SCREEN.blit(screen, (0, 0))
+        SCREEN.blit(pic, (WIDTH // 2 - 149, 26 + 30 * i))  # со скоростью падения фигурок летит типа прекольно
+        pygame.display.flip()
+        while t < speed:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    terminate()
+                if event.type == pygame.KEYDOWN:
+                    main_menu()
+                    return
+            t += clock.tick()
+        t = 0
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            if event.type == pygame.K_DOWN:
+                main_menu()
+                return
+
+
+def main_menu():
+    screen = pygame.Surface((210, 250))
+    text = ['New game', 'Records', 'Controls', 'Exit']
+    frame(screen, 1, 1, 208, 248)
+    selected = 0
+    font = pygame.font.Font(None, 30)
+    text_coord = 30
+    coords = load_text(screen, text, text_coord, font)
+    screen.blit(font.render(text[selected], True, c2), (10, coords[selected]))
+    SCREEN.blit(pygame.transform.scale(load_image('fon1.jpeg'), (WIDTH, HEIGHT)), (0, 0))
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_DOWN:
+                    selected = select_text(screen, font, text, selected, coords, 1)
+                elif event.key == pygame.K_UP:
+                    selected = select_text(screen, font, text, selected, coords, -1)
+                elif event.key == 13:  # у меня не работает K_ENTER, и K_enter, и ENTER тожe
+                    if selected == 3:
+                        terminate()
+                    elif selected == 2:
+                        controls()
+                    elif selected == 1:
+                        records()
+                    elif selected == 0:
+                        return True
+        SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+def controls():
+    screen = pygame.transform.scale(load_image("controls.png"), (210, 250))
+    SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN and (event.key == 13 or event.key == pygame.K_ESCAPE):
+                return
+        clock.tick(10)
+
+
+def records():
+    screen = pygame.Surface((210, 250))
+    frame(screen, 1, 1, 208, 248)
+    font = pygame.font.Font(None, 30)
+    text = []
+    for i in range(len(SCORES)):
+        text.append(str(i + 1) + ') ' + SCORES[i])
+    text.append('Back')
+    text_coord = load_text(screen, text, 30, font)[-1]
+    screen.blit(font.render('Back', True, c2), (10, text_coord))
+    SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN and (event.key == 13 or event.key == pygame.K_ESCAPE):
+                return
+        clock.tick(10)  # насколько я понимаю, это должно немного уменьшать затраты энергии компьютера
+
+
+def change_difficulty(field):
+    difficulty = field.difficulty
+    level = field.level
+    screen = pygame.Surface((210, 250))
+    frame(screen, 1, 1, 208, 248)
+    font = pygame.font.Font(None, 30)
+    text = ['Press D to increase', 'lvl; A - to decrease',' ', 'Current level: ' + str(level), ' ',
+            'Confirm changes', 'Cancel changes']
+    coords = load_text(screen, text, 30, font, False)[-2:]
+    selected = select_text(screen, font, text[-2:], 0, coords, 1)
+    SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
+    pygame.display.flip()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                terminate()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_a:
+                    if level > field.level:
+                        difficulty -= 1
+                        level -= 1
+                    else:
+                        pass
+                elif event.key == pygame.K_d:
+                    if level < 5:  # 5 уровень это уже очень сложно
+                        difficulty += 1
+                        level += 1
+                    else:
+                        pass
+                elif event.key == pygame.K_UP or event.key == pygame.K_DOWN:
+                    selected = select_text(screen, font, text[-2:], selected, coords, 1)
+                elif event.key == 13:
+                    if selected == 0:
+                        field.difficulty = difficulty
+                        field.level = level
+                        field.upd_level()
+                    return field
+        text[3] = text[3][:-1] + str(level)
+        load_text(screen, text[:-2], 30, font, False)
+        SCREEN.blit(screen, (WIDTH // 2 - 105, HEIGHT // 2 - 125))
+        pygame.display.flip()
 
 
 start_screen()
+main_menu()
 x = main_screen()
 while x:
     x = main_screen()
