@@ -6,7 +6,7 @@ import pygame
 
 pygame.init()
 SCORES = open("data/scores.txt").read().split('/')  # Открываем текстовый файл с результатами
-if not SCORES[0]:
+if not SCORES[0] or SCORES[0]=='\n':
     SCORES = []
 size = WIDTH, HEIGHT = 700, 650  # задаем размеры экрана
 SCREEN = pygame.display.set_mode(size)
